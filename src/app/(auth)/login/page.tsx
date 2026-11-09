@@ -63,7 +63,7 @@ function LoginContent() {
       } else if (profile.role === "admin") {
         router.push("/admin/dashboard");
       } else {
-        router.push("/staff/dashboard");
+        router.push("/dashboard");
       }
       router.refresh();
     } catch (err) {

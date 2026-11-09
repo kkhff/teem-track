@@ -14,7 +14,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/generator", label: "Generator", icon: QrCode },
   { href: "/tracking", label: "Tracking", icon: PackageSearch },
-  { href: "/staff/scanner", label: "Scan", icon: ScanLine },
+  { href: "/scanner", label: "Scan", icon: ScanLine },
 ];
 
 const AUTH_PATHS = ["/login", "/register"];
