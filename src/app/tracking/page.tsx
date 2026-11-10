@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Search, Box, Loader2, ArrowRight } from "lucide-react";
@@ -23,11 +22,11 @@ export default function PackageTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [kartonResults, setKartonResults] = useState<PackageItem[]>([]);
 
-  const loadKartons = useCallback(async (term: string, notify = false) => {
+  const loadKartons = useCallback(async (term: string, signal?: AbortSignal) => {
     try {
       setLoading(true);
       const params = term.trim() ? `?q=${encodeURIComponent(term.trim())}` : "";
-      const res = await fetch(`/api/tracking${params}`);
+      const res = await fetch(`/api/tracking${params}`, { signal });
       const data = await res.json();
 
       if (!res.ok) {
@@ -35,45 +34,31 @@ export default function PackageTrackingPage() {
       }
 
       setKartonResults(data);
-
-      if (notify && data.length === 0) {
-        toast.info("Tidak ada paket ditemukan dengan nomor seri tersebut.");
-      } else if (notify) {
-        toast.success(`Ditemukan ${data.length} Karton Utama.`);
-      }
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+
       const message = err instanceof Error ? err.message : "Terjadi kesalahan saat memuat data.";
       console.error("Gagal melacak paket:", err);
       toast.error(message);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 
+  // Debounce: tunggu user berhenti mengetik, lalu cari otomatis
   useEffect(() => {
-    let ignore = false;
-    fetch("/api/tracking")
-      .then((res) => res.json())
-      .then((data: PackageItem[]) => {
-        if (!ignore) setKartonResults(data);
-      })
-      .catch((err) => {
-        console.error("Gagal memuat data paket:", err);
-        if (!ignore) toast.error("Gagal memuat data paket.");
-      })
-      .finally(() => {
-        if (!ignore) setLoading(false);
-      });
+    const controller = new AbortController();
+    const delay = searchQuery.trim() ? 400 : 0;
+
+    const timer = setTimeout(() => {
+      loadKartons(searchQuery, controller.signal);
+    }, delay);
 
     return () => {
-      ignore = true;
+      clearTimeout(timer);
+      controller.abort();
     };
-  }, []);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    loadKartons(searchQuery, true);
-  };
+  }, [searchQuery, loadKartons]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans py-10 px-4 relative">
@@ -89,26 +74,19 @@ export default function PackageTrackingPage() {
 
         {/* Search Bar Card */}
         <Card className="bg-white border-slate-200 shadow-sm rounded-3xl p-5">
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
-              <Input
-                type="text"
-                placeholder="Cari nomor seri karton (cth: CRT-...)"
-                className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200 text-sm focus-visible:ring-red-500"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="h-11 px-6 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-md shadow-red-600/20 gap-2 shrink-0"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              Cari
-            </Button>
-          </form>
+          <div className="relative">
+            <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+            <Input
+              type="text"
+              placeholder="Cari nomor seri karton (cth: CRT-...)"
+              className="pl-10 pr-10 h-11 rounded-xl bg-slate-50 border-slate-200 text-sm focus-visible:ring-red-500"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {loading && (
+              <Loader2 className="absolute right-3.5 top-3.5 w-4 h-4 animate-spin text-slate-400" />
+            )}
+          </div>
         </Card>
 
         {/* Daftar Karton Utama */}

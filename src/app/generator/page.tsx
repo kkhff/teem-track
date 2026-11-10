@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { QrCode, Printer, Layers, CheckCircle2, Loader2, PackageCheck } from "lucide-react";
+import { QrCode, Printer, Layers, CheckCircle2, Loader2, PackageCheck, Barcode } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { BarcodeLabel } from "@/components/barcode-label";
 
 interface Location {
   id: string;
@@ -18,12 +19,14 @@ interface Location {
 interface GeneratedItem {
   serial_number: string;
   level: "karton" | "bal" | "slop";
+  code_type: "qr" | "barcode";
   parent_serial?: string;
 }
 
 export default function PackageGeneratorPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocation, setSelectedLocation] = useState("");
+  const [codeType, setCodeType] = useState<"qr" | "barcode">("qr");
   const [loading, setLoading] = useState(false);
   const [generatedSet, setGeneratedSet] = useState<GeneratedItem[]>([]);
 
@@ -34,7 +37,8 @@ export default function PackageGeneratorPage() {
       const { data, error } = await supabase
         .from("locations")
         .select("id, name, type")
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .eq("type", "factory");
 
       if (error) {
         toast.error("Gagal memuat data lokasi");
@@ -46,7 +50,7 @@ export default function PackageGeneratorPage() {
     fetchLocations();
   }, [supabase]);
 
-  // Fungsi Generate Paket Satu Set (1 Karton -> 4 Bal -> 80 Slop)
+  // Fungsi Generate Paket Satu Set (1 Karton -> 4 Bal -> 80 Slop) dengan Tipe Pilihan
   const handleGenerateSet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLocation) {
@@ -65,12 +69,12 @@ export default function PackageGeneratorPage() {
       // 1. Buat 1 Karton
       const kartonSerial = `CRT-${timestamp}-${randomBase}`;
       
-      // Simpan Karton ke DB dulu untuk dapatkan UUID-nya
       const { data: kartonData, error: kartonErr } = await supabase
         .from("packages")
         .insert({
           serial_number: kartonSerial,
           level: "karton",
+          code_type: codeType,
           current_location_id: selectedLocation,
           status: "created",
           created_by: user.id,
@@ -81,19 +85,19 @@ export default function PackageGeneratorPage() {
       if (kartonErr) throw kartonErr;
       const kartonId = kartonData.id;
 
-      const itemsToDisplay: GeneratedItem[] = [{ serial_number: kartonSerial, level: "karton" }];
+      const itemsToDisplay: GeneratedItem[] = [{ serial_number: kartonSerial, level: "karton", code_type: codeType }];
 
       // 2. Buat 4 Bal di bawah Karton ini
       for (let b = 1; b <= 4; b++) {
         const balSerial = `BAL-${timestamp}-${randomBase}-${b}`;
         
-        // Kita insert manual satu-satu atau kumpulkan untuk batch insert
         const { data: balData, error: balErr } = await supabase
           .from("packages")
           .insert({
             serial_number: balSerial,
             level: "bal",
-            parent_id: kartonId, // Relasi ke Karton
+            code_type: codeType,
+            parent_id: kartonId,
             current_location_id: selectedLocation,
             status: "created",
             created_by: user.id,
@@ -104,7 +108,7 @@ export default function PackageGeneratorPage() {
         if (balErr) throw balErr;
         const balId = balData.id;
 
-        itemsToDisplay.push({ serial_number: balSerial, level: "bal", parent_serial: kartonSerial });
+        itemsToDisplay.push({ serial_number: balSerial, level: "bal", code_type: codeType, parent_serial: kartonSerial });
 
         // 3. Buat 20 Slop di bawah masing-masing Bal (Total 4 x 20 = 80 Slop)
         const slopInserts = [];
@@ -113,26 +117,23 @@ export default function PackageGeneratorPage() {
           slopInserts.push({
             serial_number: slopSerial,
             level: "slop",
-            parent_id: balId, // Relasi ke Bal
+            code_type: codeType,
+            parent_id: balId,
             current_location_id: selectedLocation,
             status: "created",
             created_by: user.id,
           });
-          itemsToDisplay.push({ serial_number: slopSerial, level: "slop", parent_serial: balSerial });
+          itemsToDisplay.push({ serial_number: slopSerial, level: "slop", code_type: codeType, parent_serial: balSerial });
         }
 
-        // Batch insert untuk 20 slop per bal
         const { error: slopErr } = await supabase.from("packages").insert(slopInserts);
         if (slopErr) throw slopErr;
       }
 
       setGeneratedSet(itemsToDisplay);
-      toast.success("Berhasil Generate 1 Set (1 Karton, 4 Bal, 80 Slop)!");
+      toast.success(`Berhasil Generate 1 Set (1 Karton, 4 Bal, 80 Slop) menggunakan ${codeType.toUpperCase()}!`);
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Terjadi kesalahan saat menyimpan paket.";
+      const message = err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan paket.";
       console.error("Gagal generate set:", err);
       toast.error(message);
     } finally {
@@ -155,7 +156,7 @@ export default function PackageGeneratorPage() {
             Generator Paket Pabrik
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Sekali klik: 1 Karton, 4 Bal, dan 80 Slop.
+            Sekali klik: 1 Karton, 4 Bal, dan 80 Slop (Lengkap dengan QR/Barcode untuk semua level).
           </p>
         </div>
 
@@ -171,6 +172,8 @@ export default function PackageGeneratorPage() {
             </CardHeader>
             <CardContent className="p-6 space-y-5">
               <form onSubmit={handleGenerateSet} className="space-y-4">
+                
+                {/* Pilih Lokasi Pabrik */}
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-slate-700">Lokasi Pabrik Asal</Label>
                   <select
@@ -187,12 +190,41 @@ export default function PackageGeneratorPage() {
                   </select>
                 </div>
 
+                {/* Pilih Tipe Kode (QR Code / Barcode) */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700">Tipe Kode Sembunyian/Cetak</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCodeType("qr")}
+                      className={`h-11 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border ${
+                        codeType === "qr"
+                          ? "bg-red-600 text-white border-red-600 shadow-md shadow-red-600/20"
+                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      <QrCode className="w-4 h-4" /> QR Code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCodeType("barcode")}
+                      className={`h-11 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border ${
+                        codeType === "barcode"
+                          ? "bg-red-600 text-white border-red-600 shadow-md shadow-red-600/20"
+                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Barcode className="w-4 h-4" /> Barcode
+                    </button>
+                  </div>
+                </div>
+
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
                   <p className="text-xs font-bold text-slate-800">Struktur Paket yang Dihasilkan:</p>
                   <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4 font-medium">
-                    <li><strong className="text-slate-900">1 Unit</strong> Karton (Level Utama)</li>
-                    <li><strong className="text-slate-900">4 Unit</strong> Bal (Masuk ke Karton)</li>
-                    <li><strong className="text-slate-900">80 Unit</strong> Slop (20 per Bal)</li>
+                    <li><strong className="text-slate-900">1 Unit</strong> Karton Utama</li>
+                    <li><strong className="text-slate-900">4 Unit</strong> Bal (Terhubung ke Karton)</li>
+                    <li><strong className="text-slate-900">80 Unit</strong> Slop (Terhubung ke Bal masing-masing)</li>
                   </ul>
                 </div>
 
@@ -217,12 +249,12 @@ export default function PackageGeneratorPage() {
             </CardContent>
           </Card>
 
-          {/* Area Preview Hasil QR (2 Kolom) */}
+          {/* Area Preview Hasil Kode (2 Kolom) - Menampilkan Karton, Bal, & Slop */}
           <Card className="lg:col-span-2 bg-white border-slate-200 shadow-sm rounded-3xl overflow-hidden flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 px-6 pt-6 pb-4">
               <div>
-                <CardTitle className="text-base font-black text-slate-900">Daftar Nomor Seri & QR Tergenerate</CardTitle>
-                <p className="text-xs text-slate-500 mt-0.5">Paket otomatis tersimpan dan siap dicetak</p>
+                <CardTitle className="text-base font-black text-slate-900">Daftar Rincian Seluruh Paket Tergenerate (85 Item)</CardTitle>
+                <p className="text-xs text-slate-500 mt-0.5">Karton, Bal, dan Slop berhasil dirender beserta wujud kodenya</p>
               </div>
               {generatedSet.length > 0 && (
                 <Button 
@@ -244,7 +276,7 @@ export default function PackageGeneratorPage() {
                   </div>
                   <p className="text-sm font-bold text-slate-700">Belum ada batch set yang digenerate</p>
                   <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                    Pilih lokasi pabrik lalu klik tombol &quot;Generate 1 Set Lengkap&quot; di samping.
+                    Pilih tipe kode dan lokasi pabrik, lalu klik &quot;Generate 1 Set Lengkap&quot;.
                   </p>
                 </div>
               ) : (
@@ -259,8 +291,12 @@ export default function PackageGeneratorPage() {
                       }`}
                     >
                       <div className="flex items-center gap-3.5 min-w-0">
-                        <div className="bg-white p-2 rounded-xl border border-slate-200 shrink-0 shadow-inner">
-                          <QRCodeSVG value={item.serial_number} size={56} level="M" />
+                        <div className="bg-white p-2 rounded-xl border border-slate-200 shrink-0 shadow-inner flex items-center justify-center w-16 h-16">
+                          {item.code_type === 'qr' ? (
+                            <QRCodeSVG value={item.serial_number} size={48} level="M" />
+                          ) : (
+                            <BarcodeLabel value={item.serial_number} height={32} />
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -279,7 +315,7 @@ export default function PackageGeneratorPage() {
                         </div>
                       </div>
                       <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 shrink-0 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Tersimpan
+                        <CheckCircle2 className="w-3.5 h-3.5" /> {item.code_type.toUpperCase()} Tersimpan
                       </span>
                     </div>
                   ))}

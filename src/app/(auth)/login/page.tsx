@@ -58,13 +58,9 @@ function LoginContent() {
       toast.success("Login berhasil!", { description: "Mengalihkan ke sistem..." });
 
       const redirectUrl = searchParams.get("redirect");
-      if (redirectUrl) {
-        router.push(redirectUrl);
-      } else if (profile.role === "admin") {
-        router.push("/admin/dashboard");
-      } else {
-        router.push("/dashboard");
-      }
+      router.push(
+        redirectUrl && redirectUrl.startsWith("/") ? redirectUrl : "/dashboard"
+      );
       router.refresh();
     } catch (err) {
       const message =

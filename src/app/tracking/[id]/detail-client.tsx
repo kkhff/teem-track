@@ -6,12 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ArrowLeft, Box, Clock, Loader2, Layers } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import { CodePreview } from "@/components/code-preview";
 
 interface PackageDetail {
   id: string;
   serial_number: string;
   level: string;
+  code_type: "qr" | "barcode";
   status: string;
   current_location_id: string | null;
   created_at: string;
@@ -50,6 +51,16 @@ export default function PackageDetailClient({ params }: { params: Promise<{ id: 
 
         if (!res.ok) throw new Error(data?.error || "Gagal memuat detail paket.");
 
+        // Jika id yang dibuka ternyata Bal/Slop, arahkan ke halaman detail levelnya
+        if (data.package?.level === "bal") {
+          router.replace(`/tracking/bal/${data.package.id}`);
+          return;
+        }
+        if (data.package?.level === "slop") {
+          router.replace(`/tracking/slop/${data.package.id}`);
+          return;
+        }
+
         setPackageData(data.package);
         setLogs(data.logs || []);
         setChildren(data.children || []);
@@ -62,7 +73,7 @@ export default function PackageDetailClient({ params }: { params: Promise<{ id: 
     };
 
     fetchDetail();
-  }, [resolvedParams.id]);
+  }, [resolvedParams.id, router]);
 
   if (loading) {
     return (
@@ -84,6 +95,7 @@ export default function PackageDetailClient({ params }: { params: Promise<{ id: 
     );
   }
 
+  // Hanya ambil level bal untuk halaman karton ini
   const balList = children.filter((c) => c.level === "bal");
 
   return (
@@ -111,19 +123,34 @@ export default function PackageDetailClient({ params }: { params: Promise<{ id: 
                 <Box className="w-8 h-8" />
               </div>
               <div>
-                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-red-600 text-white">
-                  Karton Utama (Parent)
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-red-600 text-white">
+                    Karton Utama (Parent)
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    packageData.status === 'created' ? 'bg-blue-100 text-blue-700' :
+                    packageData.status === 'in_transit' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    Status: {packageData.status}
+                  </span>
+                </div>
                 <h1 className="text-xl font-black text-slate-900 mt-1">{packageData.serial_number}</h1>
-                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 font-medium">
-                  Status Terkini: <span className="font-bold text-slate-800 uppercase">{packageData.status}</span>
+                <p className="text-xs text-slate-500 mt-1 font-medium">
+                  Tipe Kode: <span className="uppercase font-bold text-slate-700">{packageData.code_type || 'qr'}</span>
                 </p>
               </div>
             </div>
 
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 self-center">
-              <QRCodeSVG value={packageData.serial_number} size={80} level="M" />
-            </div>
+            {/* Render QR atau Barcode (klik untuk memperbesar) */}
+            <CodePreview
+              packageId={packageData.id}
+              value={packageData.serial_number}
+              codeType={packageData.code_type || "qr"}
+              accent="red"
+              onCodeTypeChange={(type) =>
+                setPackageData((prev) => (prev ? { ...prev, code_type: type } : prev))
+              }
+            />
           </div>
         </Card>
 
@@ -163,45 +190,33 @@ export default function PackageDetailClient({ params }: { params: Promise<{ id: 
             </CardContent>
           </Card>
 
-          {/* Rincian Anak (Bal & Slop) */}
+          {/* Rincian Anak (Hanya Bal Saja, Klik untuk Masuk Detail Bal) */}
           <Card className="bg-white border-slate-200 shadow-sm rounded-3xl overflow-hidden">
             <CardHeader className="border-b border-slate-100 px-6 pt-6 pb-4">
               <CardTitle className="text-base font-black text-slate-900 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-amber-500" />
-                Rincian Isi (Bal & Slop)
+                Daftar Bal di dalam Karton Ini ({balList.length})
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-6 space-y-4 max-h-[400px] overflow-y-auto">
+            <CardContent className="p-6 space-y-3 max-h-[400px] overflow-y-auto">
               {balList.length === 0 ? (
-                <p className="text-xs text-slate-400 italic text-center py-6">Tidak ada rincian anak terdaftar.</p>
+                <p className="text-xs text-slate-400 italic text-center py-6">Tidak ada rincian bal terdaftar.</p>
               ) : (
-                balList.map((bal) => {
-                  const slopList = children.filter((s) => s.level === "slop" && s.parent_id === bal.id);
-
-                  return (
-                    <div key={bal.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500 text-white">
-                          Bal
-                        </span>
-                        <span className="text-xs font-black text-slate-800">{bal.serial_number}</span>
-                      </div>
-
-                      {slopList.length > 0 && (
-                        <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-200/60">
-                          {slopList.map((slop) => (
-                            <div key={slop.id} className="p-2 bg-white border border-slate-200 rounded-xl flex items-center gap-1.5">
-                              <span className="px-1 py-0.2 rounded text-[7px] font-bold uppercase bg-slate-700 text-white">
-                                Slop
-                              </span>
-                              <span className="text-[10px] font-bold text-slate-800 truncate">{slop.serial_number}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                balList.map((bal) => (
+                  <div 
+                    key={bal.id} 
+                    onClick={() => router.push(`/tracking/bal/${bal.id}`)}
+                    className="p-4 bg-slate-50 rounded-2xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/20 transition-all cursor-pointer flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500 text-white">
+                        Bal
+                      </span>
+                      <span className="text-xs font-black text-slate-900">{bal.serial_number}</span>
                     </div>
-                  );
-                })
+                    <span className="text-[11px] text-amber-600 font-bold hover:underline">Lihat Detail Bal &rarr;</span>
+                  </div>
+                ))
               )}
             </CardContent>
           </Card>
