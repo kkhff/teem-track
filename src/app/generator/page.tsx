@@ -1,60 +1,36 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { QrCode, Printer, Layers, CheckCircle2, Loader2, PackageCheck, Barcode } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarcodeLabel } from "@/components/barcode-label";
 
-interface Location {
-  id: string;
-  name: string;
-  type: string;
-}
-
 interface GeneratedItem {
   serial_number: string;
   level: "karton" | "bal" | "slop";
   code_type: "qr" | "barcode";
-  parent_serial?: string;
 }
 
 export default function PackageGeneratorPage() {
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState("");
+  const [level, setLevel] = useState<"karton" | "bal" | "slop">("slop");
   const [codeType, setCodeType] = useState<"qr" | "barcode">("qr");
+  const [quantity, setQuantity] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [generatedSet, setGeneratedSet] = useState<GeneratedItem[]>([]);
+  const [generatedList, setGeneratedList] = useState<GeneratedItem[]>([]);
 
   const supabase = useMemo(() => createClient(), []);
 
-  useEffect(() => {
-    const fetchLocations = async () => {
-      const { data, error } = await supabase
-        .from("locations")
-        .select("id, name, type")
-        .eq("is_active", true)
-        .eq("type", "factory");
-
-      if (error) {
-        toast.error("Gagal memuat data lokasi");
-      } else {
-        setLocations(data || []);
-        if (data && data.length > 0) setSelectedLocation(data[0].id);
-      }
-    };
-    fetchLocations();
-  }, [supabase]);
-
-  // Fungsi Generate Paket Satu Set (1 Karton -> 4 Bal -> 80 Slop) dengan Tipe Pilihan
-  const handleGenerateSet = async (e: React.FormEvent) => {
+  // Fungsi Generate KODE SATUAN MURNI (Tanpa Hierarchy di awal)
+  const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLocation) {
-      toast.error("Pilih lokasi asal pabrik terlebih dahulu!");
+    if (quantity <= 0 || quantity > 100) {
+      toast.error("Jumlah kuantitas harus di antara 1 sampai 100 unit.");
       return;
     }
 
@@ -63,78 +39,40 @@ export default function PackageGeneratorPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Sesi pengguna tidak valid. Silakan login ulang.");
 
+      const prefix = level === "karton" ? "CRT" : level === "bal" ? "BAL" : "SLP";
       const timestamp = Date.now().toString().slice(-6);
-      const randomBase = Math.floor(100 + Math.random() * 900);
-
-      // 1. Buat 1 Karton
-      const kartonSerial = `CRT-${timestamp}-${randomBase}`;
       
-      const { data: kartonData, error: kartonErr } = await supabase
-        .from("packages")
-        .insert({
-          serial_number: kartonSerial,
-          level: "karton",
+      const newItems: GeneratedItem[] = [];
+      const dbInserts = [];
+
+      for (let i = 1; i <= quantity; i++) {
+        const randomNum = Math.floor(1000 + Math.random() * 9000);
+        const serialNumber = `${prefix}-${timestamp}-${randomNum}`;
+
+        newItems.push({
+          serial_number: serialNumber,
+          level: level,
           code_type: codeType,
-          current_location_id: selectedLocation,
+        });
+
+        dbInserts.push({
+          serial_number: serialNumber,
+          level: level,
+          code_type: codeType,
+          parent_id: null, // Murni tanpa parent saat awal generate
           status: "created",
           created_by: user.id,
-        })
-        .select("id")
-        .single();
-
-      if (kartonErr) throw kartonErr;
-      const kartonId = kartonData.id;
-
-      const itemsToDisplay: GeneratedItem[] = [{ serial_number: kartonSerial, level: "karton", code_type: codeType }];
-
-      // 2. Buat 4 Bal di bawah Karton ini
-      for (let b = 1; b <= 4; b++) {
-        const balSerial = `BAL-${timestamp}-${randomBase}-${b}`;
-        
-        const { data: balData, error: balErr } = await supabase
-          .from("packages")
-          .insert({
-            serial_number: balSerial,
-            level: "bal",
-            code_type: codeType,
-            parent_id: kartonId,
-            current_location_id: selectedLocation,
-            status: "created",
-            created_by: user.id,
-          })
-          .select("id")
-          .single();
-
-        if (balErr) throw balErr;
-        const balId = balData.id;
-
-        itemsToDisplay.push({ serial_number: balSerial, level: "bal", code_type: codeType, parent_serial: kartonSerial });
-
-        // 3. Buat 20 Slop di bawah masing-masing Bal (Total 4 x 20 = 80 Slop)
-        const slopInserts = [];
-        for (let s = 1; s <= 20; s++) {
-          const slopSerial = `SLP-${timestamp}-${randomBase}-${b}-${s}`;
-          slopInserts.push({
-            serial_number: slopSerial,
-            level: "slop",
-            code_type: codeType,
-            parent_id: balId,
-            current_location_id: selectedLocation,
-            status: "created",
-            created_by: user.id,
-          });
-          itemsToDisplay.push({ serial_number: slopSerial, level: "slop", code_type: codeType, parent_serial: balSerial });
-        }
-
-        const { error: slopErr } = await supabase.from("packages").insert(slopInserts);
-        if (slopErr) throw slopErr;
+        });
       }
 
-      setGeneratedSet(itemsToDisplay);
-      toast.success(`Berhasil Generate 1 Set (1 Karton, 4 Bal, 80 Slop) menggunakan ${codeType.toUpperCase()}!`);
+      const { error: insertErr } = await supabase.from("packages").insert(dbInserts);
+      if (insertErr) throw insertErr;
+
+      setGeneratedList(newItems);
+      toast.success(`Berhasil Generate ${quantity} Unit ${level.toUpperCase()} (${codeType.toUpperCase()}) Murni!`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan paket.";
-      console.error("Gagal generate set:", err);
+      console.error("Gagal generate:", err);
       toast.error(message);
     } finally {
       setLoading(false);
@@ -153,10 +91,10 @@ export default function PackageGeneratorPage() {
       <main className="max-w-7xl mx-auto px-6 pt-8 relative z-10 space-y-8">
         <div>
           <h1 className="text-xl font-black tracking-tight text-slate-900">
-            Generator Paket Pabrik
+            Generator Kode Satuan Pabrik
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Sekali klik: 1 Karton, 4 Bal, dan 80 Slop (Lengkap dengan QR/Barcode untuk semua level).
+            Buat kode satuan mandiri (Karton, Bal, atau Slop) untuk kemudian diikat secara dinamis.
           </p>
         </div>
 
@@ -167,39 +105,43 @@ export default function PackageGeneratorPage() {
             <CardHeader className="border-b border-slate-100 px-6 pt-6 pb-4">
               <CardTitle className="text-base font-black text-slate-900 flex items-center gap-2">
                 <QrCode className="w-5 h-5 text-red-600" />
-                Konfigurasi Batch Set
+                Konfigurasi Generator
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6 space-y-5">
-              <form onSubmit={handleGenerateSet} className="space-y-4">
+              <form onSubmit={handleGenerate} className="space-y-4">
                 
-                {/* Pilih Lokasi Pabrik */}
+                {/* Pilih Level Kemasan */}
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-slate-700">Lokasi Pabrik Asal</Label>
-                  <select
-                    value={selectedLocation}
-                    onChange={(e) => setSelectedLocation(e.target.value)}
-                    className="w-full px-3 h-11 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                    required
-                  >
-                    {locations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name} ({loc.type.toUpperCase()})
-                      </option>
+                  <Label className="text-xs font-semibold text-slate-700">Level Kemasan</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["karton", "bal", "slop"] as const).map((lvl) => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setLevel(lvl)}
+                        className={`h-10 rounded-xl text-xs font-bold uppercase transition-all border ${
+                          level === lvl
+                            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {lvl}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
 
-                {/* Pilih Tipe Kode (QR Code / Barcode) */}
+                {/* Pilih Tipe Kode */}
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-slate-700">Tipe Kode Sembunyian/Cetak</Label>
+                  <Label className="text-xs font-semibold text-slate-700">Tipe Kode</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setCodeType("qr")}
-                      className={`h-11 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border ${
+                      className={`h-10 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border ${
                         codeType === "qr"
-                          ? "bg-red-600 text-white border-red-600 shadow-md shadow-red-600/20"
+                          ? "bg-red-600 text-white border-red-600 shadow-sm"
                           : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                       }`}
                     >
@@ -208,9 +150,9 @@ export default function PackageGeneratorPage() {
                     <button
                       type="button"
                       onClick={() => setCodeType("barcode")}
-                      className={`h-11 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border ${
+                      className={`h-10 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border ${
                         codeType === "barcode"
-                          ? "bg-red-600 text-white border-red-600 shadow-md shadow-red-600/20"
+                          ? "bg-red-600 text-white border-red-600 shadow-sm"
                           : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                       }`}
                     >
@@ -219,13 +161,18 @@ export default function PackageGeneratorPage() {
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                  <p className="text-xs font-bold text-slate-800">Struktur Paket yang Dihasilkan:</p>
-                  <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4 font-medium">
-                    <li><strong className="text-slate-900">1 Unit</strong> Karton Utama</li>
-                    <li><strong className="text-slate-900">4 Unit</strong> Bal (Terhubung ke Karton)</li>
-                    <li><strong className="text-slate-900">80 Unit</strong> Slop (Terhubung ke Bal masing-masing)</li>
-                  </ul>
+                {/* Input Kuantitas (Qty) */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700">Jumlah Cetak (Qty)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={quantity}
+                    onChange={(e) => setQuantity(Number(e.target.value))}
+                    className="h-11 rounded-xl bg-slate-50 border-slate-200 text-sm"
+                    required
+                  />
                 </div>
 
                 <Button
@@ -236,12 +183,12 @@ export default function PackageGeneratorPage() {
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Membuat 85 Paket & Relasi...
+                      Membuat Kode Satuan...
                     </>
                   ) : (
                     <>
                       <Layers className="w-4 h-4" />
-                      Generate 1 Set Lengkap
+                      Generate {quantity} {level.toUpperCase()}
                     </>
                   )}
                 </Button>
@@ -249,14 +196,16 @@ export default function PackageGeneratorPage() {
             </CardContent>
           </Card>
 
-          {/* Area Preview Hasil Kode (2 Kolom) - Menampilkan Karton, Bal, & Slop */}
+          {/* Area Preview Hasil (2 Kolom) */}
           <Card className="lg:col-span-2 bg-white border-slate-200 shadow-sm rounded-3xl overflow-hidden flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 px-6 pt-6 pb-4">
               <div>
-                <CardTitle className="text-base font-black text-slate-900">Daftar Rincian Seluruh Paket Tergenerate (85 Item)</CardTitle>
-                <p className="text-xs text-slate-500 mt-0.5">Karton, Bal, dan Slop berhasil dirender beserta wujud kodenya</p>
+                <CardTitle className="text-base font-black text-slate-900">
+                  Daftar Kode Tergenerate ({generatedList.length} Item)
+                </CardTitle>
+                <p className="text-xs text-slate-500 mt-0.5">Siap digunakan untuk pelabelan fisik di pabrik</p>
               </div>
-              {generatedSet.length > 0 && (
+              {generatedList.length > 0 && (
                 <Button 
                   onClick={handlePrint}
                   variant="outline" 
@@ -264,31 +213,27 @@ export default function PackageGeneratorPage() {
                   className="rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100 gap-2 text-xs font-bold"
                 >
                   <Printer className="w-4 h-4 text-slate-500" />
-                  Cetak Semua ({generatedSet.length})
+                  Cetak Semua ({generatedList.length})
                 </Button>
               )}
             </CardHeader>
             <CardContent className="p-6 flex-1">
-              {generatedSet.length === 0 ? (
+              {generatedList.length === 0 ? (
                 <div className="h-full min-h-[350px] flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
                   <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
                     <PackageCheck className="w-6 h-6" />
                   </div>
-                  <p className="text-sm font-bold text-slate-700">Belum ada batch set yang digenerate</p>
+                  <p className="text-sm font-bold text-slate-700">Belum ada kode yang digenerate</p>
                   <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                    Pilih tipe kode dan lokasi pabrik, lalu klik &quot;Generate 1 Set Lengkap&quot;.
+                    Pilih level kemasan, tentukan kuantitas, lalu klik tombol generate di sebelah kiri.
                   </p>
                 </div>
               ) : (
                 <div className="max-h-[550px] overflow-y-auto pr-2 space-y-3">
-                  {generatedSet.map((item, idx) => (
+                  {generatedList.map((item, idx) => (
                     <div 
                       key={idx} 
-                      className={`p-3.5 border rounded-2xl shadow-sm flex items-center justify-between gap-4 transition-all ${
-                        item.level === 'karton' ? 'bg-red-50/40 border-red-200' :
-                        item.level === 'bal' ? 'bg-amber-50/30 border-amber-200' :
-                        'bg-white border-slate-200'
-                      }`}
+                      className="p-3.5 border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between gap-4 bg-white"
                     >
                       <div className="flex items-center gap-3.5 min-w-0">
                         <div className="bg-white p-2 rounded-xl border border-slate-200 shrink-0 shadow-inner flex items-center justify-center w-16 h-16">
@@ -309,13 +254,13 @@ export default function PackageGeneratorPage() {
                             </span>
                             <span className="text-xs font-black text-slate-900 truncate">{item.serial_number}</span>
                           </div>
-                          <p className="text-[10px] text-slate-500 mt-1 truncate">
-                            {item.parent_serial ? `Bagian dari: ${item.parent_serial}` : 'Kemasan Utama (Karton)'}
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Format: <span className="uppercase font-bold">{item.code_type}</span> • Status: <span className="font-bold text-emerald-600">Tersimpan di DB</span>
                           </p>
                         </div>
                       </div>
                       <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 shrink-0 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> {item.code_type.toUpperCase()} Tersimpan
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Siap Cetak
                       </span>
                     </div>
                   ))}
