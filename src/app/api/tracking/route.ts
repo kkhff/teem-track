@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 
 const VALID_LEVELS = new Set(["karton", "bal", "slop"]);
 
+// Sertakan produk supaya UI bisa menampilkan gambar produk tiap paket.
+const PACKAGE_SELECT = "*, product:products(name, sku, image_url)";
+
 const MAX_CHILDREN: Record<string, number> = {
   karton: 4,
   bal: 20,
@@ -90,7 +93,7 @@ export async function GET(request: NextRequest) {
 
       const { data: balList, error: balErr } = await supabase
         .from("packages")
-        .select("*")
+        .select(PACKAGE_SELECT)
         .eq("parent_id", parent)
         .order("created_at", { ascending: false });
 
@@ -107,7 +110,7 @@ export async function GET(request: NextRequest) {
 
       const { data: slops, error: slopErr } = await supabase
         .from("packages")
-        .select("*")
+        .select(PACKAGE_SELECT)
         .in("parent_id", balIds)
         .order("created_at", { ascending: false });
 
@@ -127,7 +130,7 @@ export async function GET(request: NextRequest) {
     if (!q) {
       let listQuery = supabase
         .from("packages")
-        .select("*")
+        .select(PACKAGE_SELECT)
         .order("created_at", { ascending: false })
         .limit(1000);
 
@@ -143,7 +146,7 @@ export async function GET(request: NextRequest) {
     // termasuk yang sudah masuk ke Bal / Karton).
     let matchQuery = supabase
       .from("packages")
-      .select("*")
+      .select(PACKAGE_SELECT)
       .ilike("serial_number", `%${q}%`)
       .order("created_at", { ascending: false })
       .limit(1000);

@@ -1,8 +1,5 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { QuickTrackCard } from "@/components/quick-track-card";
 import {
-  ArrowRight,
   PackageSearch,
   ScanLine,
   Search,
@@ -32,93 +29,95 @@ const steps = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans relative selection:bg-red-500 selection:text-white">
-      {/* Background Grid Pattern */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-50 pointer-events-none fixed" />
+    <div className="min-h-screen bg-slate-100 font-sans text-slate-900">
+      <main className="mx-auto w-full max-w-5xl space-y-10 px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        {/* Hero */}
+        <section className="grid gap-6 border border-slate-300 bg-white p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-center lg:p-8">
+          <div>
+            <span className="inline-flex items-center gap-2 border border-slate-300 bg-slate-50 px-2.5 py-1 text-[10px] font-bold tracking-[0.16em] text-slate-600 uppercase">
+              <ShieldCheck className="h-3.5 w-3.5" /> Portal Pelacakan Paket
+            </span>
 
-      <main className="relative z-10 max-w-5xl mx-auto px-6 pt-12 pb-20 space-y-16">
-        {/* Hero Section */}
-        <div className="text-center space-y-6 max-w-3xl mx-auto pt-6">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-red-50 border border-red-100 text-red-600 text-xs font-black uppercase tracking-wider">
-            <ShieldCheck className="w-4 h-4" /> Portal Pelacakan Paket
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              Lacak Paket dari{" "}
+              <span className="underline decoration-slate-300 decoration-4 underline-offset-4">
+                Kode di Kemasan
+              </span>
+            </h1>
+
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-600">
+              Scan QR / barcode atau masukkan nomor seri untuk melihat detail
+              paket, level kemasan, dan riwayat pergerakannya. Tanpa perlu
+              login.
+            </p>
+
+            <div className="mt-6 grid grid-cols-3 gap-px border border-slate-300 bg-slate-300">
+              {[
+                { label: "Input", value: "Serial" },
+                { label: "Metode", value: "Scan" },
+                { label: "Output", value: "Detail" },
+              ].map((item) => (
+                <div key={item.label} className="bg-slate-50 px-3 py-2.5">
+                  <p className="text-[9px] font-bold tracking-[0.16em] text-slate-500 uppercase">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 font-mono text-xs font-bold text-slate-900">
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900 leading-[1.15]">
-            Lacak Paket Cukup dari{" "}
-            <span className="text-red-600">Kode di Kemasan</span>
-          </h1>
-
-          <p className="text-sm sm:text-base text-slate-600 font-medium leading-relaxed max-w-2xl mx-auto">
-            Scan QR / barcode atau masukkan nomor seri untuk melihat detail
-            paket, level kemasan, dan riwayat pergerakannya. Tanpa perlu login.
-          </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-            <Link href="/scan">
-              <Button
-                size="lg"
-                className="h-12 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm px-6 shadow-lg shadow-red-600/25 gap-2"
-              >
-                <ScanLine className="w-4 h-4" /> Track Paket
-              </Button>
-            </Link>
-          </div>
-        </div>
+          <QuickTrackCard />
+        </section>
 
         {/* Cara Kerja */}
-        <div className="space-y-5">
-          <div className="text-center space-y-1">
-            <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">
-              Cara Kerja
-            </h2>
-            <p className="text-xl font-black text-slate-900">
-              Tiga Langkah Cek Paket
-            </p>
+        <section className="space-y-3">
+          <div className="flex items-end justify-between gap-3 border-b border-slate-300 pb-2">
+            <div>
+              <p className="text-[10px] font-bold tracking-[0.18em] text-slate-500 uppercase">
+                Cara Kerja
+              </p>
+              <h2 className="mt-0.5 text-lg font-bold tracking-tight text-slate-900">
+                Tiga Langkah Cek Paket
+              </h2>
+            </div>
+            <span className="font-mono text-xs font-bold text-slate-400">
+              01 — 03
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {steps.map((step, index) => {
               const Icon = step.icon;
               return (
-                <Card
+                <article
                   key={step.title}
-                  className="bg-white border-slate-200 shadow-sm rounded-3xl overflow-hidden hover:shadow-md transition-all"
+                  className="border border-slate-300 bg-white"
                 >
-                  <CardContent className="p-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 border border-red-100 flex items-center justify-center">
-                        <Icon className="w-6 h-6" />
-                      </div>
-                      <span className="text-2xl font-black text-slate-200">
-                        0{index + 1}
-                      </span>
-                    </div>
-                    <div>
-                      <h3 className="text-base font-black text-slate-900">
-                        {step.title}
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                        {step.description}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-300 bg-slate-50 px-4 py-2">
+                    <h3 className="text-[11px] font-bold tracking-wider text-slate-600 uppercase">
+                      {step.title}
+                    </h3>
+                    <span className="font-mono text-xs font-bold text-slate-400">
+                      0{index + 1}
+                    </span>
+                  </div>
+                  <div className="p-4">
+                    <Icon className="h-5 w-5 text-slate-700" />
+                    <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                      {step.description}
+                    </p>
+                  </div>
+                </article>
               );
             })}
           </div>
+        </section>
 
-          <div className="text-center">
-            <Link href="/scan">
-              <Button className="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-5 gap-2">
-                Mulai Track Sekarang <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <footer className="pt-8 border-t border-slate-200 text-center text-[11px] font-semibold text-slate-400">
-          Teem.id Supply Chain &middot; Portal pelacakan paket &amp; pasokan
+        <footer className="border-t border-slate-300 pt-4 text-center text-[10px] font-bold tracking-[0.16em] text-slate-500 uppercase">
+          Teem.id Supply Chain &middot; Portal Pelacakan Paket &amp; Pasokan
         </footer>
       </main>
     </div>

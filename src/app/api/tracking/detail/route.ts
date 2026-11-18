@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   try {
     const { data: packageData, error: packageErr } = await supabase
       .from("packages")
-      .select("*")
+      .select("*, product:products(name, sku, image_url)")
       .eq("id", id)
       .single();
 

@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
-import { Navbar } from "@/components/navbar";
+import { AppShell } from "@/components/app-shell";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -22,15 +22,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id" className={`${inter.variable} h-full`}>
-      <body className="min-h-full flex flex-col bg-slate-50 font-sans text-slate-900 antialiased selection:bg-red-500 selection:text-white">
+      <body className="min-h-full flex flex-col bg-slate-100 font-sans text-slate-900 antialiased">
         <Suspense
           fallback={
-            <header className="sticky top-0 z-40 h-[65px] border-b border-slate-200 bg-white/80 backdrop-blur-md" />
+            <>
+              <header className="sticky top-0 z-40 h-[65px] border-b border-slate-300 bg-white" />
+              <div className="flex-1 flex flex-col">{children}</div>
+            </>
           }
         >
-          <Navbar />
+          <AppShell>{children}</AppShell>
         </Suspense>
-        {children}
         <Toaster position="top-right" richColors />
       </body>
     </html>

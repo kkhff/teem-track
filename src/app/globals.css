@@ -3,7 +3,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -79,5 +79,63 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  ::selection {
+    @apply bg-slate-900 text-white;
+  }
+}
+
+/* ===== Cetak stiker QR / barcode (halaman Generator) ===== */
+#sticker-print-root {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 6mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Saat daftar stiker siap, sembunyikan seluruh aplikasi dan
+     hanya cetak salinan stiker di #sticker-print-root. */
+  body.has-sticker-print > *:not(#sticker-print-root) {
+    display: none !important;
+  }
+
+  body.has-sticker-print #sticker-print-root {
+    display: block !important;
+  }
+
+  #sticker-print-root .sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-content: start;
+    gap: 6px;
+    width: 100%;
+  }
+
+  #sticker-print-root .sticker-item {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px dashed #94a3b8 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    padding: 6px !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #sticker-print-root .sticker-item svg {
+    display: block;
   }
 }
